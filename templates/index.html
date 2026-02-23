@@ -5,9 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Live Board</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
     <style>
         * {
             box-sizing: border-box;
@@ -23,19 +21,20 @@
         }
 
         .hero {
-            padding: 64px 24px 48px;
+            padding: 48px 24px;
             text-align: center;
         }
 
         .hero h1 {
-            font-size: 2.8rem;
+            font-size: 2.4rem;
             font-weight: 600;
-            margin-bottom: 12px;
+            margin-bottom: 8px;
         }
 
         .hero p {
             color: #6e6e73;
-            margin-bottom: 24px;
+            margin-bottom: 16px;
+            font-size: 0.9rem;
         }
 
         .bot-badge {
@@ -45,6 +44,7 @@
             background: #f5f5f7;
             color: #0066cc;
             text-decoration: none;
+            font-size: 0.8rem;
         }
 
         #feed {
@@ -57,16 +57,16 @@
             position: relative;
             display: flex;
             gap: 14px;
-            padding: 20px 22px;
+            padding: 18px;
             border-radius: 16px;
             background: #fff;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 6px 20px rgba(0, 0, 0, 0.06);
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1), 0 6px 16px rgba(0, 0, 0, 0.05);
             margin-bottom: 14px;
         }
 
         .avatar {
-            width: 44px;
-            height: 44px;
+            width: 40px;
+            height: 40px;
             border-radius: 50%;
             display: flex;
             align-items: center;
@@ -74,6 +74,7 @@
             font-weight: 600;
             color: #fff;
             overflow: hidden;
+            font-size: 0.8rem;
         }
 
         .avatar img {
@@ -90,27 +91,28 @@
         .card-meta {
             display: flex;
             align-items: baseline;
-            gap: 10px;
-            margin-bottom: 6px;
+            gap: 8px;
+            margin-bottom: 4px;
         }
 
         .card-name {
             font-weight: 600;
-            font-size: 0.9rem;
+            font-size: 0.85rem;
         }
 
         .card-time {
             position: absolute;
-            top: 20px;
-            right: 22px;
-            font-size: 0.78rem;
+            top: 18px;
+            right: 18px;
+            font-size: 0.7rem;
             color: #aeaeb2;
         }
 
         .card-text {
-            line-height: 1.55;
+            line-height: 1.4;
             color: #3a3a3c;
             word-break: break-word;
+            font-size: 0.95rem;
         }
 
         .card-media {
@@ -130,49 +132,25 @@
         .document-link {
             display: inline-flex;
             align-items: center;
-            padding: 10px 16px;
+            padding: 8px 12px;
             background: #f5f5f7;
             border-radius: 8px;
             text-decoration: none;
             color: #0066cc;
+            font-size: 0.85rem;
         }
 
         #empty {
             text-align: center;
-            padding: 60px 0;
+            padding: 40px 0;
             color: #aeaeb2;
-        }
-
-        .dot-flashing {
-            display: inline-flex;
-            gap: 6px;
-        }
-
-        .dot-flashing span {
-            width: 7px;
-            height: 7px;
-            border-radius: 50%;
-            background: #c7c7cc;
-            animation: blink 1.2s infinite;
-        }
-
-        @keyframes blink {
-
-            0%,
-            80%,
-            100% {
-                opacity: 0.3;
-            }
-
-            40% {
-                opacity: 1;
-            }
+            font-size: 0.8rem;
         }
 
         @keyframes rise {
             from {
                 opacity: 0;
-                transform: translateY(12px);
+                transform: translateY(10px);
             }
 
             to {
@@ -190,60 +168,42 @@
 <body>
     <section class="hero">
         <h1>Live Q&A Wall</h1>
-        <p>Задайте вопрос боту — он появится на экране.</p>
+        <p>Задайте вопрос боту — он появится здесь.</p>
         <a class="bot-badge" href="https://t.me/LiveWalllbot">@LiveWalllbot</a>
     </section>
-
     <main id="feed">
-        <div id="empty">
-            <div class="dot-flashing"><span></span><span></span><span></span></div>
-            <p style="margin-top:14px;">Ожидаем сообщения...</p>
-        </div>
+        <div id="empty">Ожидаем вопросы...</div>
     </main>
-
     <script>
         const COLORS = ['#3a86ff', '#8338ec', '#ff006e', '#fb5607', '#06d6a0', '#118ab2'];
         const seen = new Set();
         const feed = document.getElementById('feed');
-        const empty = document.getElementById('empty');
-
         const color = id => COLORS[Math.abs(Number(id) || 0) % COLORS.length];
-        const initials = name => name.trim().split(/\s+/).map(w => w[0]).join('').slice(0, 2);
+        const initials = name => name.trim().split(/\s+/).map(w => w[0]).join('').toUpperCase().slice(0, 2);
         const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
         function prettytime(ts) {
             if (!ts) return '';
-            const d = new Date(ts.replace(' ', 'T'));
-            if (isNaN(d)) return ts;
-            const now = new Date();
-            const pad = n => String(n).padStart(2, '0');
-            const time = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
-            if (d.toDateString() === now.toDateString()) return `сегодня в ${time}`;
-            return `${d.getDate()} ${['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'][d.getMonth()]}, ${time}`;
+            const d = new Date(ts.replace(' ', 'T')), now = new Date();
+            const time = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+            return d.toDateString() === now.toDateString() ? `сегодня в ${time}` : `${d.getDate()} ${['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'][d.getMonth()]} в ${time}`;
         }
 
         function buildCard(msg, fresh) {
-            const bg = color(msg.user_id);
-            const inits = initials(msg.user_name);
-            const avatar = msg.photo_url ? `<img src="${msg.photo_url}">` : inits;
+            const mediaUrl = `/api/media/${msg.id}`;
+            let media = '';
+            if (msg.media_type === 'photo') media = `<div class="card-media"><img src="${mediaUrl}"></div>`;
+            else if (msg.media_type === 'video') media = `<div class="card-media"><video src="${mediaUrl}" controls></video></div>`;
+            else if (msg.media_type === 'audio') media = `<div class="card-media"><audio src="${mediaUrl}" controls></audio></div>`;
+            else if (msg.media_type) media = `<div class="card-media"><a href="${mediaUrl}" class="document-link" download>Файл</a></div>`;
+
             const card = document.createElement('div');
             card.className = 'card' + (fresh ? ' is-new' : '');
-
-            let media = '';
-            if (msg.media_url) {
-                if (msg.media_type === 'photo') media = `<div class="card-media"><img src="${msg.media_url}"></div>`;
-                else if (msg.media_type === 'video') media = `<div class="card-media"><video src="${msg.media_url}" controls></video></div>`;
-                else if (msg.media_type === 'audio') media = `<div class="card-media"><audio src="${msg.media_url}" controls></audio></div>`;
-                else media = `<div class="card-media"><a href="${msg.media_url}" class="document-link" download>Скачать файл</a></div>`;
-            }
-
+            const av = msg.photo_url ? `<img src="${msg.photo_url}">` : initials(msg.user_name);
             card.innerHTML = `
-                <div class="avatar" style="background:${bg}">${avatar}</div>
+                <div class="avatar" style="background:${color(msg.user_id)}">${av}</div>
                 <div class="card-body">
-                    <div class="card-meta">
-                        <span class="card-name">${esc(msg.user_name)}</span>
-                        <span class="card-time">${prettytime(msg.timestamp)}</span>
-                    </div>
+                    <div class="card-meta"><span class="card-name">${esc(msg.user_name)}</span><span class="card-time">${prettytime(msg.timestamp)}</span></div>
                     <div class="card-text">${esc(msg.text)}</div>
                     ${media}
                 </div>`;
@@ -252,22 +212,18 @@
 
         async function poll() {
             try {
-                const res = await fetch('/api/messages');
-                const data = await res.json();
-                if (data.length > 0 && empty) empty.remove();
+                const res = await fetch('/api/messages'), data = await res.json();
+                if (data.length > 0 && document.getElementById('empty')) document.getElementById('empty').remove();
                 data.reverse().forEach(m => {
-                    const key = m.timestamp + m.user_id + m.text;
-                    if (!seen.has(key)) {
+                    if (!seen.has(m.id)) {
                         const fresh = seen.size > 0;
-                        seen.add(key);
+                        seen.add(m.id);
                         feed.insertAdjacentElement('afterbegin', buildCard(m, fresh));
                     }
                 });
             } catch (e) { }
         }
-
-        setInterval(poll, 3000);
-        poll();
+        setInterval(poll, 3000); poll();
     </script>
 </body>
 
