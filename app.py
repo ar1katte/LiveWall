@@ -1,20 +1,20 @@
 import os
-import uuid
 import telebot
 from flask import Flask, request, render_template, jsonify, Response
-from dotenv import load_dotenv
 import database
 
-load_dotenv()
-database.init_db()
+# Настройки
+BOT_TOKEN = '8547486680:AAFmjAEvAwb4irHCi2P4VNiSSZgfH0ECyII'
+BOARD_URL = 'https://arikatte.pythonanywhere.com'
 
-BOT_TOKEN = os.environ.get('BOT_TOKEN', 'token')
-BOARD_URL  = os.environ.get('BOARD_URL', 'http://127.0.0.1:5000')
-
-bot = telebot.TeleBot(BOT_TOKEN)
+bot = telebot.TeleBot(BOT_TOKEN, threaded=False)
 app = Flask(__name__)
 
+# Храним состояние анонимности в памяти (на сервере оно сбросится при Reload)
 anon_users = set()
+
+# Инициализируем БД при запуске
+database.init_db()
 
 @app.route('/')
 def index():
@@ -22,16 +22,22 @@ def index():
 
 @app.route('/api/messages')
 def get_messages():
-    return jsonify(database.get_latest_messages(50))
+    try:
+        msgs = database.get_latest_messages(50)
+        return jsonify(msgs)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/api/media/<int:msg_id>')
 def get_media(msg_id):
-    # отдаем файл прямо из базы
-    res = database.get_media(msg_id)
-    if not res or not res[0]: return "No media", 404
-    blob, mtype = res
-    ext_map = {'photo': 'image/jpeg', 'video': 'video/mp4', 'audio': 'audio/mpeg'}
-    return Response(blob, mimetype=ext_map.get(mtype, 'application/octet-stream'))
+    try:
+        blob, mtype = database.get_media(msg_id)
+        if not blob: return "No media", 404
+        # Мапинг типов контента
+        content_types = {'photo': 'image/jpeg', 'video': 'video/mp4'}
+        return Response(blob, mimetype=content_types.get(mtype, 'application/octet-stream'))
+    except:
+        return "Error", 500
 
 @app.route('/webhook', methods=['POST'])
 def webhook():
@@ -41,39 +47,6 @@ def webhook():
         bot.process_new_updates([update])
         return '!', 200
     return 'Forbidden', 403
-
-from telebot import types
-
-@bot.message_handler(commands=['start'])
-def send_welcome(message):
-    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    markup.row(types.KeyboardButton("Написать вопрос"))
-    markup.row(types.KeyboardButton("Анонимный режим"), types.KeyboardButton("Ссылка на доску"))
-    markup.row(types.KeyboardButton("Помощь"))
-    status = "анон включен" if message.from_user.id in anon_users else "от своего имени"
-    bot.reply_to(message, f"Привет, {message.from_user.first_name}.\n\nСтатус: {status}.", reply_markup=markup)
-
-@bot.message_handler(func=lambda m: m.text == "Анонимный режим")
-def toggle_anon(message):
-    uid = message.from_user.id
-    if uid in anon_users:
-        anon_users.discard(uid)
-        bot.send_message(message.chat.id, "Анон выключен.")
-    else:
-        anon_users.add(uid)
-        bot.send_message(message.chat.id, "Анон включен.")
-
-@bot.message_handler(func=lambda m: m.text == "Ссылка на доску")
-def send_link(message):
-    bot.send_message(message.chat.id, f"Доска тут: {BOARD_URL}")
-
-@bot.message_handler(func=lambda m: m.text == "Помощь")
-def send_help(message):
-    bot.send_message(message.chat.id, "Пиши текст, он появится на доске. Есть кнопка анонимности.")
-
-@bot.message_handler(func=lambda m: m.text == "Написать вопрос")
-def prompt_question(message):
-    bot.send_message(message.chat.id, "Жду вопрос.")
 
 def get_user_photo(user_id):
     try:
@@ -85,40 +58,60 @@ def get_user_photo(user_id):
     except: pass
     return None
 
-@bot.message_handler(content_types=['text', 'photo', 'document', 'video', 'audio', 'voice'])
-def process_message(message):
+# --- ОБРАБОТЧИКИ БОТА ---
+
+@bot.message_handler(commands=['start'])
+def send_welcome(message):
+    markup = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True)
+    markup.add("Написать вопрос", "Анонимный режим")
+    bot.send_message(message.chat.id, "Бот готов к работе.", reply_markup=markup)
+
+@bot.message_handler(func=lambda m: m.text == "Анонимный режим")
+def toggle_anon(message):
     uid = message.from_user.id
-    if message.text and message.text.startswith(("Аноним", "Ссылка", "Помощь", "Написать")): return
-
     if uid in anon_users:
-        username, photo_url = "Аноним", None
+        anon_users.remove(uid)
+        bot.send_message(message.chat.id, "Режим анонимности ВЫКЛЮЧЕН.")
     else:
-        username = message.from_user.first_name
-        if message.from_user.last_name: username += f" {message.from_user.last_name}"
-        photo_url = get_user_photo(uid)
+        anon_users.add(uid)
+        bot.send_message(message.chat.id, "Режим анонимности ВКЛЮЧЕН.")
 
-    text = (message.text or message.caption or "")[:500]
-    media_blob, media_type, file_info_obj = None, None, None
+@bot.message_handler(content_types=['text', 'photo', 'video'])
+def process_message(message):
+    # Игнорируем нажатия кнопок меню
+    if message.text in ["Написать вопрос", "Анонимный режим"]:
+        bot.send_message(message.chat.id, "Жду твой текст или файл...")
+        return
+    
+    uid = message.from_user.id
+    is_anon = uid in anon_users
+    
+    # Формируем данные
+    username = "Аноним" if is_anon else message.from_user.first_name
+    photo_url = None if is_anon else get_user_photo(uid)
+    text = (message.text or message.caption or "")
+    
+    media_blob, media_type = None, None
+    file_obj = None
+    
+    if message.photo:
+        file_obj, media_type = message.photo[-1], 'photo'
+    elif message.video:
+        file_obj, media_type = message.video, 'video'
 
-    if message.photo: file_info_obj, media_type = message.photo[-1], 'photo'
-    elif message.document: file_info_obj, media_type = message.document, 'document'
-    elif message.video: file_info_obj, media_type = message.video, 'video'
-    elif message.audio: file_info_obj, media_type = message.audio, 'audio'
-    elif message.voice: file_info_obj, media_type = message.voice, 'audio'
-
-    if file_info_obj:
+    if file_obj:
         try:
-            fi = bot.get_file(file_info_obj.file_id)
+            fi = bot.get_file(file_obj.file_id)
             media_blob = bot.download_file(fi.file_path)
         except: pass
 
-    database.add_message(uid, username, photo_url, text, media_type, media_blob)
-    markup = types.InlineKeyboardMarkup()
-    markup.add(types.InlineKeyboardButton("Открыть доску", url=BOARD_URL))
-    bot.reply_to(message, "Принято.", reply_markup=markup)
+    try:
+        database.add_message(uid, username, photo_url, text, media_type, media_blob)
+        bot.send_message(message.chat.id, "Сообщение опубликовано на доске!")
+    except Exception as e:
+        bot.send_message(message.chat.id, f"Ошибка сохранения в базу: {e}")
 
 if __name__ == '__main__':
-    import threading
+    # Если запуск локальный - удаляем вебхук и запускаем поллинг
     bot.remove_webhook()
-    threading.Thread(target=bot.infinity_polling, daemon=True).start()
-    app.run(debug=True, host='0.0.0.0', port=5000, use_reloader=False)
+    bot.infinity_polling()
